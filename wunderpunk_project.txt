@@ -8,6 +8,7 @@ strategy('Wunderpunk Strategy', 'wunderpunk', true, precision=4, max_labels_coun
 
 use_Lorentzian_Classification = input.bool(true, "Enable Lorentzian Classification",  group = "Indicators")
 use_LSMA = input.bool(true, "Enable LSMA",  group = "Indicators")
+RSI_filter = input.bool(true, "Enable RSI",  group = "Indicators")
 
 // Long Options
 useLong = input.bool(true, "Enable Long Position",  group = "Long Options")
@@ -69,25 +70,31 @@ atr = ma_function(ta.tr(true), length)
 
 // Indicator # 1: LSMA
 
-LSMA_length = input.int(21,title="LSMA Length")
-offset = input.int(0,title="LSMA Offset")
-length2 = input.int(4,title="LSMA Trigger Length")
-LSMA_src = input(close, title="Source")
-lsma = ta.linreg(LSMA_src, LSMA_length, offset)
+LSMA_length = input.int(21,title="LSMA Length", group = "LSMA")
+offset = input.int(0,title="LSMA Offset", group = "LSMA")
+length2 = input.int(4,title="LSMA Trigger Length", group = "LSMA")
+lsma = ta.linreg(close, LSMA_length, offset)
 lsma_d = ta.sma(lsma,length2)
-lsmalong = ta.linreg(LSMA_src,200,0)
-lsmaxlong = ta.linreg(LSMA_src,1000,0)
+lsmalong = ta.linreg(close,200,0)
+lsmaxlong = ta.linreg(close,1000,0)
 plot(lsma, linewidth=3, color=color.blue, title = "LSMA")
 plot(lsma_d, linewidth=3, color=color.yellow, title = "LSMA Trigger")
-plot(lsmalong, linewidth=3, color=color.white, title = "LSMA Long")
-plot(lsmaxlong, linewidth=3, color=color.blue, title = "LSMA XLong")
+plot(lsmalong, linewidth=3, color=color.rgb(224, 21, 21), title = "LSMA Long")
+plot(lsmaxlong, linewidth=2, color=color.rgb(38, 42, 45), title = "LSMA XLong")
+
+select_lsma = input.string(title="select lsma ", defval="lsmaxlong", options=["lsmaxlong", "lsmalong"], group = "LSMA")
+lsma_ref = select_lsma == "lsmaxlong" ? lsmaxlong : lsmalong
+
+lsma_cond = ta.crossover(lsma,lsma_d) and close>lsma_ref
+lsma_cond_s = ta.crossover(lsma,lsma_d) and close>lsma_ref
 
 // Indicator # 2 RSI
 
 rsi = ta.rsi(close,input.int(14,"RSI Length", group = "RSI"))
+RSI_threshold = input.int(50,"RSI_threshold",group = "RSI")
 
-
-
+rsi_cond = rsi > RSI_threshold
+rsi_cond_s = rsi < RSI_threshold
 
 // Indicator # 3: Machine Learning: Lorentzian Classification
 
@@ -551,8 +558,32 @@ if showTradeStats
 
 //Conditions
 
-LONG = startLongTrade and rsi > 50 and checkDays()
-SHORT = startShortTrade and rsi < 50 and checkDays()
+LONG = false
+SHORT = false
+
+if use_Lorentzian_Classification
+    LONG := startLongTrade and checkDays()
+    SHORT := startShortTrade and checkDays()
+
+if use_LSMA
+    LONG := lsma_cond and checkDays()
+    SHORT := lsma_cond_s and checkDays()
+
+if use_Lorentzian_Classification and use_LSMA
+    LONG := startLongTrade and checkDays() and lsma_cond
+    SHORT := startShortTrade and checkDays() and lsma_cond_s
+
+if use_Lorentzian_Classification and RSI_filter
+    LONG := startLongTrade and checkDays() and rsi_cond
+    SHORT := startShortTrade and checkDays() and rsi_cond_s
+
+if use_LSMA and RSI_filter
+    LONG := lsma_cond and checkDays() and rsi_cond
+    SHORT := lsma_cond_s and checkDays() and rsi_cond_s
+
+if use_Lorentzian_Classification and RSI_filter and use_LSMA
+    LONG := startLongTrade and checkDays() and rsi_cond and lsma_cond
+    SHORT := startShortTrade and checkDays() and rsi_cond_s and lsma_cond_s
 
 var float longSL = na
 var float longTP = na
