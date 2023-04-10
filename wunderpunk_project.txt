@@ -13,13 +13,11 @@ RSI_filter = input.bool(true, "Enable RSI",  group = "Indicators")
 // Long Options
 useLong = input.bool(true, "Enable Long Position",  group = "Long Options")
 slType_long = input.string(defval = "ATR Multiplier", title = "SL Type", options = ["ATR Multiplier", "Regression Line","LSMA crossover","Kernel color change", "opposite Lorentzian Classification"], group = "Long Options")
-slMult_long = input.float(1.0, "SL ATR Multiplier", group = "Long Options", step  =0.5)
 rr_long = input.float(3, "R:R Long", group = "Long Options", step = 0.5)
 
 // Short Options
 useShort = input.bool(true, "Enable Short Position",  group = "Short Options")
 slType_short = input.string(defval = "ATR Multiplier", title = "SL Type", options = ["ATR Multiplier", "Regression Line","LSMA crossover","Kernel color change", "opposite Lorentzian Classification"], group = "Short Options")
-slMult_short = input.float(1.0, "SL ATR Multiplier", group = "Short Options", step  =0.5)
 rr_short = input.float(3, "R:R Short", group = "Short Options", step = 0.5)
 
 // Trading Days
@@ -65,8 +63,28 @@ ma_function(source, length) =>
 		"SMA" => ta.sma(source, length)
 		"EMA" => ta.ema(source, length)
 		=> ta.wma(source, length)
-atr = ma_function(ta.tr(true), length)
+// atr = ma_function(ta.tr(true), length)
+// atrLong = atr * slMult_long + high
+// atrShort = low - atr * slMult_short
 
+
+atrMult = input.float(1.0, "SL ATR Multiplier", step  =0.5, group = "ATR Length")
+// src1 = input(high)
+// src2 = input(low)
+// pline = input(true, "Show Price Lines")
+// col1 = input(color.blue, "ATR Text Color")
+// col2 = input(color.teal, "Low Text Color",inline ="1")
+// col3 = input(color.red, "High Text Color",inline ="2")
+
+collong = input(color.teal, "Low Line Color",inline ="1")
+colshort = input(color.red, "High Line Color",inline ="2")
+
+atr = ma_function(ta.tr(true), length) * atrMult
+x1 = ma_function(ta.tr(true), length) * atrMult + close
+x2 = close - ma_function(ta.tr(true), length) * atrMult
+
+p1 = plot(x1, title = "ATR Short Stop Loss", color= colshort)
+p2 = plot(x2, title = "ATR Long Stop Loss", color= collong)
 
 // Indicator # 1: LSMA
 
@@ -199,7 +217,7 @@ Settings settings =
    input.int(title="Max Bars Back", defval=2000, group="General Settings"),
    input.int(title="Feature Count", defval=5, group="Feature Engineering", minval=2, maxval=5, tooltip="Number of features to use for ML predictions."),
    input.int(title="Color Compression", defval=1, group="General Settings", minval=1, maxval=10, tooltip="Compression factor for adjusting the intensity of the color scale."),
-   input.bool(title="Show Default Exits", defval=false, group="General Settings", tooltip="Default exits occur exactly 4 bars after an entry signal. This corresponds to the predefined length of a trade during the model's training process.", inline="exits"),
+   input.bool(title="Show Default Exits", defval=true, group="General Settings", tooltip="Default exits occur exactly 4 bars after an entry signal. This corresponds to the predefined length of a trade during the model's training process.", inline="exits"),
    input.bool(title="Use Dynamic Exits", defval=false, group="General Settings", tooltip="Dynamic exits attempt to let profits ride by dynamically adjusting the exit threshold based on kernel regression logic.", inline="exits")
  )
    
@@ -603,7 +621,7 @@ if LONG and useLong and strategy.position_size == 0
     strategy.entry("Long", strategy.long)
     // sl = slType_long == "ATR Multiplier" ? close - slMult_long * atr : kernelEstimate
     sl = switch slType_long
-        "ATR Multiplier" => close - slMult_long * atr
+        "ATR Multiplier" => x2
         "Regression Line" => kernelEstimate
         => close*(1-maxSL)
 
@@ -613,9 +631,10 @@ if LONG and useLong and strategy.position_size == 0
     longSL := sl
     longTP := tp
 
+lsmaCross = ta.crossover(lsma,lsma_d)
 // slType_long = input.string(defval = "ATR Multiplier", title = "SL Type", options = ["ATR Multiplier", "Regression Line","LSMA crossover","Kernel color change", "opposite Lorentzian Classification"], group = "Long Options")
 if strategy.position_size>0
-    if slType_long == "LSMA crossover" and lsma_cond_s
+    if slType_long == "LSMA crossover" and lsmaCross
         strategy.close("Exit long", "Long")
     else if slType_long == "Kernel color change" and plotColor == c_red
         strategy.close("Long")
@@ -626,7 +645,7 @@ if SHORT and useShort and strategy.position_size == 0
     strategy.entry("Short", strategy.short)    
     // sl = slType_short == "ATR Multiplier" ? close + slMult_short * atr : kernelEstimate
     sl = switch slType_short
-        "ATR Multiplier" => close + slMult_short * atr
+        "ATR Multiplier" => x1
         "Regression Line" => kernelEstimate
         => close/(1-maxSL)
     tp = close - rr_short * (sl - close)
@@ -635,8 +654,10 @@ if SHORT and useShort and strategy.position_size == 0
     shortSL := sl
     shortTP := tp
 
+lsmaCross_s = ta.crossunder(lsma,lsma_d)
+
 if strategy.position_size<0
-    if slType_short == "LSMA crossover" and lsma_cond
+    if slType_short == "LSMA crossover" and lsmaCross_s
         strategy.close("Short")
     else if slType_short == "Kernel color change" and plotColor == c_green
         strategy.close("Short")
@@ -645,7 +666,7 @@ if strategy.position_size<0
 
 
 pe = plot(strategy.position_size!=0 ?  strategy.position_avg_price : na, color = color.gray, style = plot.style_linebr)
-ps = plot(strategy.position_size!=0 ? strategy.position_size > 0 ? longSL : shortSL : na, color = color.red, style = plot.style_linebr)
+ps = plot(strategy.position_size!=0 ? strategy.position_size > 0 ? longSL : shortSL : na, color = color.red, style = plot.style_linebr, offset = -1)
 pt = plot(strategy.position_size!=0 ? strategy.position_size >0 ? longTP : shortTP : na, color = color.green, style = plot.style_linebr)
 
 fill(pe,pt, color = color.new(color.green,95))
@@ -653,8 +674,8 @@ fill(pe,ps, color = color.new(color.red,95))
 
 plotshape(LONG and useLong ? low : na, 'Buy', shape.labelup, location.belowbar, color=ml.color_green(prediction), size=size.small, offset=0)
 plotshape(SHORT and useShort ? high : na, 'Sell', shape.labeldown, location.abovebar, ml.color_red(-prediction), size=size.small, offset=0)
-plotshape(endLongTrade and settings.showExits ? high : na, 'StopBuy', shape.xcross, location.absolute, color=#3AFF17, size=size.tiny, offset=0)
-plotshape(endShortTrade and settings.showExits ? low : na, 'StopSell', shape.xcross, location.absolute, color=#FD1707, size=size.tiny, offset=0)
+plotshape(startShortTrade and settings.showExits ? high : na, 'StopBuy', shape.cross, location.abovebar, color=#e31414, size=size.normal, offset=0)
+plotshape(startLongTrade and settings.showExits ? low : na, 'StopSell', shape.cross, location.abovebar, color=#18f318, size=size.normal, offset=0)
 
 // DASHBOARD CALCULATIONS
 streakLen = 0
