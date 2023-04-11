@@ -76,15 +76,15 @@ atrMult = input.float(1.0, "SL ATR Multiplier", step  =0.5, group = "ATR Length"
 // col2 = input(color.teal, "Low Text Color",inline ="1")
 // col3 = input(color.red, "High Text Color",inline ="2")
 
-collong = input(color.teal, "Low Line Color",inline ="1")
-colshort = input(color.red, "High Line Color",inline ="2")
+// collong = plot(color.teal, "Low Line Color",inline ="1")
+// colshort = plot(color.red, "High Line Color",inline ="2")
 
 atr = ma_function(ta.tr(true), length) * atrMult
 x1 = ma_function(ta.tr(true), length) * atrMult + close
 x2 = close - ma_function(ta.tr(true), length) * atrMult
 
-p1 = plot(x1, title = "ATR Short Stop Loss", color= colshort)
-p2 = plot(x2, title = "ATR Long Stop Loss", color= collong)
+p1 = plot(x1, title = "ATR Short Stop Loss", color= color.red)
+p2 = plot(x2, title = "ATR Long Stop Loss", color= color.teal)
 
 // Indicator # 1: LSMA
 
@@ -100,19 +100,16 @@ plot(lsma_d, linewidth=3, color=color.yellow, title = "LSMA Trigger")
 plot(lsmalong, linewidth=3, color=color.rgb(247, 243, 243), title = "LSMA Long")
 plot(lsmaxlong, linewidth=2, color=color.rgb(62, 52, 171), title = "LSMA XLong")
 
-select_lsma = input.string(title="select lsma ", defval="lsmalong", options=["lsmaxlong", "lsmalong","both"], group = "LSMA")
-lsma_ref = select_lsma == "both" ? math.max(lsmaxlong,lsmalong) : (select_lsma == "lsmaxlong" ? lsmaxlong : lsmalong)
-lsma_ref_s = select_lsma == "both" ? math.min(lsmaxlong,lsmalong) : (select_lsma == "lsmaxlong" ? lsmaxlong : lsmalong)
+select_lsma = input.string(title="select lsma ", defval="lsmalong", options=["lsmaxlong", "lsmalong","both","None"], group = "LSMA")
+lsma_ref = select_lsma == "both" ? math.max(lsmaxlong,lsmalong) : (select_lsma == "lsmaxlong" ? lsmaxlong : (select_lsma == "lsmalong" ? lsmalong : 0.0))
+lsma_ref_s = select_lsma == "both" ? math.min(lsmaxlong,lsmalong) : (select_lsma == "lsmaxlong" ? lsmaxlong : (select_lsma == "lsmalong" ? lsmalong : 99999999999))
 
-lsma_cond = ta.crossover(lsma,lsma_d) and close>lsma_ref
-lsma_cond_s = ta.crossunder(lsma,lsma_d) and close<lsma_ref_s
-
+lsma_cond = close>lsma_ref
+lsmaExit = ta.crossover(lsma,lsma_d) and close>lsma_ref
+lsma_cond_s = close<lsma_ref_s
+lsmaExit_s = ta.crossunder(lsma,lsma_d) and close<lsma_ref_s
 // Indicator # 2 RSI
-rsiTF = input.timeframe('1 hour', "RSI Resolution", options=['1 hour', '4 hour', 'D','W'], group = "RSI")
-rsiTF := switch rsiTF
-    "1 hour" => "60"
-    "4 hour" => "240"
-    => rsiTF
+rsiTF = input.timeframe('240', "RSI Resolution", group = "RSI")
 
 rsiClose = request.security(syminfo.tickerid,rsiTF,close)
 
@@ -622,20 +619,21 @@ if LONG and useLong and strategy.position_size == 0
     // sl = slType_long == "ATR Multiplier" ? close - slMult_long * atr : kernelEstimate
     sl = switch slType_long
         "ATR Multiplier" => x2
-        "Regression Line" => kernelEstimate
         => close*(1-maxSL)
-
+        // "Regression Line" => kernelEstimate
     tp = close + rr_long * (close - sl)
     strategy.exit("Exit long", "Long", stop = math.max(sl,close*(1-maxSL)) , limit = tp)
 
     longSL := sl
     longTP := tp
 
-lsmaCross = ta.crossover(lsma,lsma_d)
+lsmaCross = ta.crossunder(lsma,lsma_d)
 // slType_long = input.string(defval = "ATR Multiplier", title = "SL Type", options = ["ATR Multiplier", "Regression Line","LSMA crossover","Kernel color change", "opposite Lorentzian Classification"], group = "Long Options")
 if strategy.position_size>0
     if slType_long == "LSMA crossover" and lsmaCross
         strategy.close("Exit long", "Long")
+    else if slType_short == "Regression Line" and low < kernelEstimate
+        strategy.close("Long")
     else if slType_long == "Kernel color change" and plotColor == c_red
         strategy.close("Long")
     else if slType_long == "opposite Lorentzian Classification" and startShortTrade
@@ -646,18 +644,21 @@ if SHORT and useShort and strategy.position_size == 0
     // sl = slType_short == "ATR Multiplier" ? close + slMult_short * atr : kernelEstimate
     sl = switch slType_short
         "ATR Multiplier" => x1
-        "Regression Line" => kernelEstimate
         => close/(1-maxSL)
+        // "Regression Line" => kernelEstimate
+        
     tp = close - rr_short * (sl - close)
     strategy.exit("Exit Short", "Short", stop = math.min(sl,close/(1-maxSL)) , limit = tp)
 
     shortSL := sl
     shortTP := tp
 
-lsmaCross_s = ta.crossunder(lsma,lsma_d)
+lsmaCross_s = ta.crossover(lsma,lsma_d)
 
 if strategy.position_size<0
     if slType_short == "LSMA crossover" and lsmaCross_s
+        strategy.close("Short")
+    else if slType_short == "Regression Line" and high > kernelEstimate
         strategy.close("Short")
     else if slType_short == "Kernel color change" and plotColor == c_green
         strategy.close("Short")
