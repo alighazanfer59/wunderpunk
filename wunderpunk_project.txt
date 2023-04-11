@@ -1,5 +1,5 @@
 // This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © thomas39901
+// © pidePython >>>> alifiverr
 
 //@version=5
 strategy('Wunderpunk Strategy', 'wunderpunk', true, precision=4, max_labels_count=500, default_qty_value = 100 ,initial_capital = 10000, default_qty_type = strategy.percent_of_equity) 
