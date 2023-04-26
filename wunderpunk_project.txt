@@ -1,5 +1,5 @@
 // This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © pidePython >>>> alifiverr
+// © thomas39901
 
 //@version=5
 strategy('Wunderpunk Strategy', 'wunderpunk', true, precision=4, max_labels_count=500, default_qty_value = 100 ,initial_capital = 10000, default_qty_type = strategy.percent_of_equity) 
@@ -110,11 +110,13 @@ lsma_cond_s = close<lsma_ref_s
 lsmaExit_s = ta.crossunder(lsma,lsma_d) and close<lsma_ref_s
 // Indicator # 2 RSI
 rsiTF = input.timeframe('240', "RSI Resolution", group = "RSI")
+rsiLength = input.int(56, "RSI Length", group = "RSI")
 
 rsiClose = request.security(syminfo.tickerid,rsiTF,close)
-
-rsi = ta.rsi(rsiClose,input.int(14,"RSI Length", group = "RSI"))
+rsi = ta.rsi(rsiClose, rsiLength)   //input.int(14,"RSI Length", group = "RSI"))
 RSI_threshold = input.int(50,"RSI_threshold",group = "RSI")
+plot(rsiClose,"rsiClose", color = color.purple)
+plot(rsi,"rsi", color = color.rgb(232, 73, 0))
 
 rsi_cond = rsi > RSI_threshold
 rsi_cond_s = rsi < RSI_threshold
